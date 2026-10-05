@@ -26,10 +26,15 @@ def text_aus_ziel(ziel):
     ).strip('" ') or None
 
 
-def ziel_erreicht(ziel, page):
+def ziel_erreicht(ziel, page, verlauf):
+    try:
+        inhalt = " ".join(page.inner_text("body").split())[:1200]
+    except Exception:
+        inhalt = ""
     antwort = frage(
-        f"Ziel des Nutzers: {ziel}\nAktuelle Seite: {page.title()} ({page.url})",
-        "Ist das Ziel auf der aktuellen Seite schon erreicht?",
+        f"Ziel des Nutzers: {ziel}\nBisherige Schritte: {'; '.join(verlauf)}\n"
+        f"Aktuelle Seite: {page.title()} ({page.url})\nSeiteninhalt: {inhalt}",
+        "Ist das Ziel auf der aktuellen Seite schon erreicht (Suche zeigt Ergebnisse, gesuchte Seite ist offen)?",
         {"ja": "Ja, das Ziel ist erreicht", "nein": "Nein, es sind noch weitere Schritte nötig"},
     )
     return antwort == "ja"
@@ -55,8 +60,10 @@ if __name__ == "__main__":
         except Exception:
             pass
 
+        getippt = False
+        verlauf = []                                        # bisherige Schritte (Element + Seite)
         for schritt in range(1, MAX_SCHRITTE + 1):
-            if schritt > 1 and ziel_erreicht(ziel, page):      # Prüfen (erst nach dem ersten Schritt)
+            if schritt > 1 and ziel_erreicht(ziel, page, verlauf):   # Prüfen (erst nach dem ersten Schritt)
                 print("Ziel erreicht:", page.url)
                 break
             elemente = elemente_auslesen(page)                 # Lesen
@@ -64,14 +71,22 @@ if __name__ == "__main__":
                 print("Keine Elemente mehr.")
                 break
             liste = als_liste(elemente)
-            nr = entscheide(f"Ziel: {ziel}. Wähle das Element für den nächsten Schritt.", liste)  # Entscheiden
+            hinweis = f' Der Text "{text}" ist noch nicht getippt: wähle das Suchfeld (Eingabefeld).' if text and not getippt else ""
+            nr = entscheide(f"Ziel: {ziel}. Wähle das Element für den nächsten Schritt.{hinweis}", liste)  # Entscheiden
             ziel_el = elemente[nr - 1]
             print(f"Schritt {schritt}: {liste.splitlines()[nr - 1]}")
+            marke = (page.url, liste.splitlines()[nr - 1])
+            if verlauf and verlauf[-1] == f"{marke[1]} auf {marke[0]}":   # gleicher Klick auf gleicher Seite = kein Fortschritt
+                print("Stopp: kein Fortschritt, das Ziel ist vermutlich erreicht:", page.url)
+                break
+            verlauf.append(f"{marke[1]} auf {marke[0]}")
             if not freigabe(liste.splitlines()[nr - 1]):
                 print("Abgebrochen: nicht freigegeben.")
                 break
             sel = f'[data-nr="{nr}"]'
-            if ziel_el["tag"] in ("input", "textarea") and text and ziel_el["typ"] not in ("radio", "checkbox"):
+            tippbar = ziel_el["tag"] == "textarea" or (ziel_el["tag"] == "input" and ziel_el["typ"] in ("text", "search", "", "email", "url", "tel"))
+            if tippbar and text:
+                getippt = True
                 page.fill(sel, text)                           # Ausführen
                 page.keyboard.press("Enter")
             else:

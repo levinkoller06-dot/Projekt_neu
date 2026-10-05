@@ -52,7 +52,7 @@ def ziel_url(eingabe):
         return eingabe
     if " " not in eingabe and "." in eingabe:
         return "https://" + eingabe
-    return "https://duckduckgo.com/?q=" + quote_plus(eingabe)
+    return "https://search.brave.com/search?q=" + quote_plus(eingabe)
 
 
 if __name__ == "__main__":

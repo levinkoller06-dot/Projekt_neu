@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 
+from schritt2_augen import BRAVE_PFADE
 from schritt3_gehirn import frage, text_modell
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -30,14 +31,16 @@ def befehl_ausfuehren(satz):
     # Browser: Gemini zerlegt den Satz in Webadresse und Ziel
     antwort = text_modell(
         f'Befehl: "{satz}"\nAntworte in genau einer Zeile im Format: ADRESSE | ZIEL\n'
-        "ADRESSE = Domain der Webseite (z.B. wikipedia.org, migros.ch). "
+        "ADRESSE = Domain der Webseite (z.B. wikipedia.org, migros.ch). Bei einer allgemeinen Websuche ohne genannte Seite "
+        "immer search.brave.com, niemals google.com. "
         'ZIEL = was auf der Seite getan werden soll, kurz auf Deutsch, Suchbegriff in "Anführungszeichen" '
         '(z.B. suche nach "Katzen"). Wenn die Seite nur geöffnet werden soll, schreibe - als ZIEL.'
     )
     adresse, _, ziel = (t.strip() for t in antwort.splitlines()[0].partition("|"))
     print(f"   Seite: {adresse} | Ziel: {ziel}")
     if ziel in ("", "-"):
-        os.startfile("https://" + adresse)
+        brave = next((p for p in BRAVE_PFADE if os.path.exists(p)), None)   # immer Brave, nie der Standardbrowser
+        subprocess.Popen([brave, "https://" + adresse]) if brave else os.startfile("https://" + adresse)
     else:
         starte("schritt4_schleife.py", adresse, ziel)
 
