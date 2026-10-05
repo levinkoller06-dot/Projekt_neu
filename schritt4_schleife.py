@@ -26,6 +26,24 @@ def text_aus_ziel(ziel):
     ).strip('" ') or None
 
 
+ABLEHNEN = ("alle ablehnen", "ablehnen", "nur notwendige", "nur erforderliche", "reject all", "decline", "necessary only")
+
+
+def banner_ablehnen(page):
+    """Klickt bei einem Cookie-/Einwilligungsbanner die datensparsamste Option (ablehnen). True, wenn geklickt."""
+    elemente = elemente_auslesen(page)
+    for i, e in enumerate(elemente, 1):
+        name = " ".join((e["text"] or e["label"]).split()).lower()
+        if e["tag"] == "button" and any(name == w or name.startswith(w) for w in ABLEHNEN):
+            try:
+                page.click(f'[data-nr="{i}"]', timeout=3000)
+            except Exception:
+                page.eval_on_selector(f'[data-nr="{i}"]', "e => e.click()")
+            page.wait_for_timeout(1500)
+            return True
+    return False
+
+
 def ziel_erreicht(ziel, page, verlauf):
     try:
         inhalt = " ".join(page.inner_text("body").split())[:1200]
@@ -63,7 +81,10 @@ if __name__ == "__main__":
         getippt = False
         verlauf = []                                        # bisherige Schritte (Element + Seite)
         for schritt in range(1, MAX_SCHRITTE + 1):
-            if schritt > 1 and ziel_erreicht(ziel, page, verlauf):   # Prüfen (erst nach dem ersten Schritt)
+            if banner_ablehnen(page):                          # Cookie-/Einwilligungsbanner zuerst ablehnen
+                print("Banner abgelehnt.")
+            # Erreicht kann das Ziel erst sein, wenn der gesuchte Text auch getippt wurde
+            if schritt > 1 and (getippt or not text) and ziel_erreicht(ziel, page, verlauf):
                 print("Ziel erreicht:", page.url)
                 break
             elemente = elemente_auslesen(page)                 # Lesen
