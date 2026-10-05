@@ -1,8 +1,10 @@
 # Schritt 5.3: Alles öffnen – "öffne retrac" sucht Programm, Datei oder Ordner auf dem PC und öffnet es
 # Benutzung: python schritt5_oeffnen.py "öffne retrac"
 # Es muss kein Explorer-Fenster offen sein. Suchreihenfolge: Startmenü (Programme), dann Benutzerordner, dann Programme-Ordner.
+import json
 import os
 import re
+import subprocess
 import sys
 import time
 
@@ -16,7 +18,8 @@ STARTMENUE = [
 ]
 BENUTZERORDNER = [os.path.join(HOME, n) for n in ("Desktop", "Downloads", "Documents", "OneDrive", "Pictures", "Videos", "Music")] + [HOME]
 PROGRAMME = [os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")]
-UEBERSPRINGEN = {"appdata", "node_modules", ".git", ".venv", "__pycache__", "$recycle.bin", "windows", "site-packages"}
+UEBERSPRINGEN = {"appdata", "node_modules", ".git", ".venv", "__pycache__", "$recycle.bin", "windows", "site-packages", "windowsapps"}
+SYSTEMDATEIEN = {".dll", ".ico", ".sys", ".mui", ".dat", ".pyc", ".log", ".tmp"}  # keine sinnvollen Öffnen-Ziele
 
 
 def ziel_name(befehl):
@@ -34,6 +37,22 @@ def rang(name, ziel):
     return 2 if z in stamm else None
 
 
+def start_apps(ziel):
+    """Installierte Apps (auch Store-Apps wie Spotify/Outlook) aus Windows' eigener App-Liste: (rang, 'shell:AppsFolder\\ID', name)."""
+    cmd = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-StartApps | ConvertTo-Json"
+    try:
+        roh = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, timeout=15).stdout.decode("utf-8")
+        apps = json.loads(roh)
+    except Exception:
+        return []
+    treffer = []
+    for a in apps if isinstance(apps, list) else [apps]:
+        r = rang(a["Name"], ziel)
+        if r is not None:
+            treffer.append((r, "shell:AppsFolder\\" + a["AppID"], a["Name"]))
+    return treffer
+
+
 def suche(ziel):
     """Gibt Treffer als Liste von (rang, pfad) zurück; bricht bei exaktem Treffer sofort ab."""
     start, treffer, gesehen = time.time(), [], set()
@@ -46,7 +65,7 @@ def suche(ziel):
             if wurzel == HOME and ordner.count("\\") - tiefe0 >= 3:   # Benutzerordner nur 3 Ebenen tief
                 unterordner[:] = []
             for n in (dateien if wurzel in STARTMENUE else unterordner + dateien):   # im Startmenü nur Programme, keine Ordner
-                r = rang(n, ziel)
+                r = None if os.path.splitext(n)[1].lower() in SYSTEMDATEIEN else rang(n, ziel)
                 pfad = os.path.join(ordner, n)
                 if r is not None and pfad not in gesehen:
                     gesehen.add(pfad)
@@ -62,7 +81,12 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         raise SystemExit('Benutzung: python schritt5_oeffnen.py "öffne retrac"')
     ziel = ziel_name(sys.argv[1])
-    treffer = sorted(suche(ziel), key=lambda t: (t[0], len(t[1])))[:8]
+    apps = sorted(start_apps(ziel), key=lambda t: (t[0], len(t[2])))     # 1. installierte Apps
+    if apps and apps[0][0] <= 1:
+        print("Starte App:", apps[0][2])
+        os.startfile(apps[0][1])
+        sys.exit()
+    treffer = sorted(suche(ziel), key=lambda t: (t[0], len(t[1])))[:8]   # 2. Dateien und Ordner
     if not treffer:
         raise SystemExit(f"Nichts gefunden für '{ziel}'.")
     pfad = treffer[0][1]
