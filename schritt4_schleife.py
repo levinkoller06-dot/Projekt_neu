@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 
 from schritt2_augen import BRAVE_PFADE, elemente_auslesen, als_liste
 from schritt3_gehirn import frage, entscheide
-from schritt4_web import ziel_url
+from schritt4_web import ziel_url, freigabe
 
 MAX_SCHRITTE = 8
 
@@ -59,6 +59,9 @@ if __name__ == "__main__":
             nr = entscheide(f"Ziel: {ziel}. Wähle das Element für den nächsten Schritt.", liste)  # Entscheiden
             ziel_el = elemente[nr - 1]
             print(f"Schritt {schritt}: {liste.splitlines()[nr - 1]}")
+            if not freigabe(liste.splitlines()[nr - 1]):
+                print("Abgebrochen: nicht freigegeben.")
+                break
             sel = f'[data-nr="{nr}"]'
             if ziel_el["tag"] in ("input", "textarea") and text and ziel_el["typ"] not in ("radio", "checkbox"):
                 page.fill(sel, text)                           # Ausführen

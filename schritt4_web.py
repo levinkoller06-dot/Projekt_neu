@@ -20,6 +20,21 @@ def befehl_zerlegen(befehl):
     return (m.group(1) or m.group(2)).strip(), m.group(3).strip()
 
 
+RISKANT = ("kaufen", "zahlungspflichtig", "bezahl", "zur kasse", "absenden", "abschicken", "senden",
+           "löschen", "entfernen", "buchen", "veröffentlichen", "delete", "buy", "pay", "purchase",
+           "checkout", "submit", "send", "bestellung abschliessen", "jetzt bestellen")
+
+
+def freigabe(eintrag):
+    """Rückfrage vor riskanten Klicks (kaufen, senden, löschen ...). Ohne Eingabe (kein Terminal) = nein."""
+    if not any(w in eintrag.lower() for w in RISKANT):
+        return True
+    try:
+        return input(f"⚠ Riskante Aktion: «{eintrag}». Ausführen? (ja/nein) ").strip().lower() in ("ja", "j", "yes", "y")
+    except EOFError:
+        return False
+
+
 def genauer_treffer(befehl, liste):
     """'klick auf X': gibt es genau ein Element, das exakt X heisst, nimmt man es ohne Jev."""
     m = re.match(r"\s*klick\w*\s+(?:auf\s+)?(?:den\s+|die\s+|das\s+)?(.+)", befehl, re.I)
@@ -70,6 +85,9 @@ if __name__ == "__main__":
             # Entscheiden: bei "tippe X in Y" sucht Jev nur das Ziel Y, der Text X kommt aus dem Satz
             nr = genauer_treffer(befehl, liste) or entscheide(f"bediene: {tippen[1]}" if tippen else befehl, liste)
             print("Jev wählt:", liste.splitlines()[nr - 1])
+            if not freigabe(liste.splitlines()[nr - 1]):
+                print("Abgebrochen: nicht freigegeben.")
+                break
 
             if tippen:                                   # Ausführen
                 page.fill(f'[data-nr="{nr}"]', tippen[0])
