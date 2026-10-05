@@ -22,7 +22,8 @@ def befehl_zerlegen(befehl):
 
 RISKANT = ("kaufen", "zahlungspflichtig", "bezahl", "zur kasse", "absenden", "abschicken", "senden",
            "löschen", "entfernen", "buchen", "veröffentlichen", "delete", "buy", "pay", "purchase",
-           "checkout", "submit", "send", "bestellung abschliessen", "jetzt bestellen")
+           "checkout", "submit", "send", "bestellung abschliessen", "jetzt bestellen",
+           ".exe", ".bat", ".cmd", ".ps1", ".msi", ".vbs", ".scr", ".lnk")  # Programme starten = riskant
 
 
 def freigabe(eintrag):

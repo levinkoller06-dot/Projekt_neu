@@ -29,7 +29,7 @@ if __name__ == "__main__":
     titel, befehl = sys.argv[1], sys.argv[2]
     ziel = next((w for w in fenster() if titel.lower() in w.window_text().lower()), None)
     if not ziel:
-        raise SystemExit(f"Kein Fenster mit '{titel}' gefunden.")
+        raise SystemExit(f"Kein Fenster mit '{titel}' gefunden. Offene Fenster: " + ", ".join(w.window_text()[:30] for w in fenster()))
 
     eintraege = elemente_mit_objekt(ziel)                       # Lesen
     liste = "\n".join(f"{i}. {art}: {name}" for i, (art, name, _) in enumerate(eintraege, 1))
