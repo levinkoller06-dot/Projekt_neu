@@ -36,7 +36,8 @@ if __name__ == "__main__":
     nr = genauer_treffer(befehl.replace("öffne", "klick auf"), liste) or entscheide(befehl, liste)  # Entscheiden
     art, name, element = eintraege[nr - 1]
     print(f"Jev wählt: {nr}. {art}: {name}")
-    if not freigabe(f"{art}: {name}"):
+    # Der Explorer blendet Endungen aus ("retrac" statt "retrac.exe"), darum fragen wir bei jeder Datei nach
+    if not freigabe(f"{art}: {name}", immer=(art == "Eintrag")):
         raise SystemExit("Abgebrochen: nicht freigegeben.")
 
     ziel.set_focus()                                            # nach vorne holen, sonst trifft der Klick ein anderes Fenster

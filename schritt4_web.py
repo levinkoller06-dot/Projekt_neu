@@ -26,9 +26,9 @@ RISKANT = ("kaufen", "zahlungspflichtig", "bezahl", "zur kasse", "absenden", "ab
            ".exe", ".bat", ".cmd", ".ps1", ".msi", ".vbs", ".scr", ".lnk")  # Programme starten = riskant
 
 
-def freigabe(eintrag):
+def freigabe(eintrag, immer=False):
     """Rückfrage vor riskanten Klicks (kaufen, senden, löschen ...). Ohne Eingabe (kein Terminal) = nein."""
-    if not any(w in eintrag.lower() for w in RISKANT):
+    if not immer and not any(w in eintrag.lower() for w in RISKANT):
         return True
     try:
         return input(f"⚠ Riskante Aktion: «{eintrag}». Ausführen? (ja/nein) ").strip().lower() in ("ja", "j", "yes", "y")
