@@ -8,7 +8,7 @@ from urllib.parse import quote_plus
 
 from playwright.sync_api import sync_playwright
 
-from schritt2_augen import BRAVE_PFADE, elemente_auslesen, als_liste
+from schritt2_augen import BRAVE_PFADE, brave_verbinden, elemente_auslesen, als_liste
 from schritt3_gehirn import entscheide
 
 
@@ -64,8 +64,7 @@ if __name__ == "__main__":
     url, befehle = ziel_url(sys.argv[1]), sys.argv[2:]   # mehrere Befehle werden nacheinander ausgeführt
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path=brave, headless=False)
-        page = browser.new_page()
+        page = brave_verbinden(p).new_page()             # Brave bleibt nach dem Skript offen
         print("Öffne:", url)
         page.goto(url, wait_until="domcontentloaded")
         try:                                             # Seite fertig laden lassen (sonst schliessen sich Popups wieder)
@@ -102,5 +101,4 @@ if __name__ == "__main__":
             print("Jetzt auf:", page.url)
             if os.environ.get("LISTE"):
                 page.screenshot(path=os.environ["LISTE"] + f"_{befehle.index(befehl) + 1}.png")
-        page.wait_for_timeout(5000)
-        browser.close()
+        # kein browser.close(): das Fenster soll offen bleiben

@@ -8,7 +8,7 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
-from schritt2_augen import BRAVE_PFADE, elemente_auslesen, als_liste
+from schritt2_augen import BRAVE_PFADE, brave_verbinden, elemente_auslesen, als_liste
 from schritt3_gehirn import frage, entscheide, text_modell
 from schritt4_web import ziel_url, freigabe
 
@@ -71,8 +71,7 @@ if __name__ == "__main__":
     print("Text zum Tippen:", text)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path=brave, headless=False)
-        context = browser.new_context()
+        context = brave_verbinden(p)                           # Brave bleibt nach dem Skript offen
         page = context.new_page()
         page.goto(url, wait_until="domcontentloaded")
         try:
@@ -128,5 +127,4 @@ if __name__ == "__main__":
                     pass
         else:
             print("Abbruch: nach", MAX_SCHRITTE, "Schritten nicht fertig.")
-        page.wait_for_timeout(2000)
-        browser.close()
+        # kein browser.close(): das Fenster soll offen bleiben

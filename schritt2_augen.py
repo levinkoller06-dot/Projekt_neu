@@ -43,6 +43,33 @@ SAMMELN = """
 """
 
 
+def brave_verbinden(p, port=9222):
+    """Startet Brave einmal als eigenes Programm (bleibt offen) oder verbindet sich mit dem schon laufenden. Gibt den Kontext zurück."""
+    import socket
+    import subprocess
+    import time
+
+    def offen():
+        with socket.socket() as s:
+            return s.connect_ex(("127.0.0.1", port)) == 0
+
+    if not offen():
+        brave = next((x for x in BRAVE_PFADE if os.path.exists(x)), None)
+        if not brave:
+            raise SystemExit("Brave nicht gefunden.")
+        profil = str(Path(__file__).parent / ".brave-profil")   # eigenes Profil, getrennt vom normalen Brave
+        subprocess.Popen(
+            [brave, f"--remote-debugging-port={port}", f"--user-data-dir={profil}", "--no-first-run"],
+            creationflags=0x00000008 | 0x00000200,  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: überlebt das Skript
+        )
+        for _ in range(40):
+            if offen():
+                break
+            time.sleep(0.25)
+    browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
+    return browser.contexts[0]
+
+
 def elemente_auslesen(page):
     return page.evaluate(SAMMELN)
 
