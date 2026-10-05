@@ -9,7 +9,7 @@ import sys
 from playwright.sync_api import sync_playwright
 
 from schritt2_augen import BRAVE_PFADE, elemente_auslesen, als_liste
-from schritt3_gehirn import frage, entscheide
+from schritt3_gehirn import frage, entscheide, text_modell
 from schritt4_web import ziel_url, freigabe
 
 MAX_SCHRITTE = 8
@@ -17,7 +17,13 @@ MAX_SCHRITTE = 8
 
 def text_aus_ziel(ziel):
     m = re.search(r'"(.+?)"', ziel) or re.search(r"\bnach\s+(.+)$", ziel, re.I)
-    return m.group(1).strip() if m else None
+    if m:
+        return m.group(1).strip()
+    # Keine Regel passt: das Text-Modell formuliert den Suchtext
+    return text_modell(
+        f'Ziel des Nutzers: "{ziel}"\nWas soll in ein Suchfeld getippt werden? '
+        "Antworte nur mit dem Suchtext, ohne Anführungszeichen. Wenn kein Text nötig ist, antworte mit -"
+    ).strip('" ') or None
 
 
 def ziel_erreicht(ziel, page):
@@ -37,6 +43,8 @@ if __name__ == "__main__":
         raise SystemExit("Brave nicht gefunden.")
     url, ziel = ziel_url(sys.argv[1]), sys.argv[2]
     text = text_aus_ziel(ziel)
+    text = None if text == "-" else text
+    print("Text zum Tippen:", text)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path=brave, headless=False)

@@ -13,13 +13,38 @@ URL = "https://openrouter.ai/api/alpha/decisions"
 MODELL = "typesafe/jev-1.13"  # Alternative: "~typesafe/jev-latest"
 
 
-def key_aus_env_datei():
+def key_aus_env_datei(name="OPENROUTER_API_KEY"):
     datei = Path(__file__).parent / ".env"
     if datei.exists():
         for zeile in datei.read_text(encoding="utf-8").splitlines():
-            if zeile.startswith("OPENROUTER_API_KEY="):
+            if zeile.startswith(name + "="):
                 return zeile.split("=", 1)[1].strip()
     return None
+
+
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
+
+
+def text_modell(aufgabe):
+    """Text-Modell (Gemini): erzeugt freien Text, z.B. den Suchbegriff zum Tippen."""
+    key = os.environ.get("GOOGLE_API_KEY") or key_aus_env_datei("GOOGLE_API_KEY")
+    if not key:
+        raise SystemExit("GOOGLE_API_KEY fehlt (Umgebungsvariable oder .env-Datei).")
+    body = {
+        "contents": [{"parts": [{"text": aufgabe}]}],
+        "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}},
+    }
+    req = urllib.request.Request(
+        GEMINI_URL,
+        data=json.dumps(body).encode(),
+        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            antwort = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise SystemExit(f"Gemini-Fehler {e.code}: {e.read().decode(errors='replace')}")
+    return antwort["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
 def frage(state, instructions, criteria):
