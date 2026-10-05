@@ -14,12 +14,15 @@ BRAVE_PFADE = [
 SAMMELN = """
 () => [...document.querySelectorAll('button, a[href], input, textarea, select, [role=button]')]
   .filter(e => e.offsetParent !== null && e.type !== 'hidden')
-  .map(e => ({
+  .slice(0, 60)
+  .map((e, i) => (e.setAttribute('data-nr', i + 1), {
     tag: e.tagName.toLowerCase(),
     typ: e.type || '',
     text: (e.innerText || e.value || '').trim(),
     platzhalter: e.placeholder || '',
     id: e.id || '',
+    label: e.getAttribute('aria-label') || e.title || '',
+    href: (e.getAttribute('href') || '').slice(0, 60),
   }))
 """
 
@@ -32,7 +35,8 @@ def als_liste(elemente):
     zeilen = []
     for i, e in enumerate(elemente, 1):
         art = {"button": "Button", "a": "Link", "input": "Feld", "textarea": "Feld", "select": "Auswahl"}.get(e["tag"], e["tag"])
-        name = e["text"] or e["platzhalter"] or e["id"] or "(ohne Name)"
+        name = e["text"] or e["platzhalter"] or e["label"] or e["id"] or e["href"] or "(ohne Name)"
+        name = " ".join(name.split())[:60]  # eine Zeile, max. 60 Zeichen
         zeilen.append(f"{i}. {art}: {name}")
     return "\n".join(zeilen)
 

@@ -7,6 +7,9 @@
 2. ✅ Schritt 2 – Augen (`schritt2_augen.py`; Testseite hat jetzt Feld, 2 Buttons, Link): Seite auslesen, alle Buttons/Felder als nummerierte Liste ausgeben
 3. ✅ Schritt 3 – Gehirn (`schritt3_gehirn.py`, Jev über OpenRouter, Key in lokaler `.env`, nicht im Repo): Modell entscheidet aus einem Satz („klick auf Anmelden“), welches Element geklickt wird
 
+4. ⏳ Schritt 4 – Web ausbauen: 4.1 ✅ beliebige Seiten (`schritt4_web.py <url|suchbegriff> "<befehl>"`); 4.2 Tippen; 4.3 Mehrschritt-Schleife
+5. ⏳ Schritt 5 – Desktop/Explorer (UI Automation, erst nur Lesen)
+
 ## Setup
 - Windows, Python 3.12, Playwright 1.63
 - Browser: Brave (Pfad wird im Script automatisch gesucht)
