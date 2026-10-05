@@ -22,24 +22,15 @@ def key_aus_env_datei():
     return None
 
 
-def entscheide(befehl, liste_text, anzahl):
-    """Der austauschbare Entscheider: gibt die Nummer (1-basiert) des Elements zurück."""
+def frage(state, instructions, criteria):
+    """Der austauschbare Entscheider (Jev): wählt einen Schlüssel aus criteria."""
     key = os.environ.get("OPENROUTER_API_KEY") or key_aus_env_datei()
     if not key:
         raise SystemExit("OPENROUTER_API_KEY fehlt (Umgebungsvariable oder .env-Datei).")
     body = {
         "model": MODELL,
-        "state": (
-            f"Elemente auf der Seite:\n{liste_text}\n\nBefehl des Nutzers: {befehl}\n"
-            "Frage: Welche Nummer hat das Element, das laut Befehl bedient werden soll?"
-        ),
-        "questions": {
-            "element": {
-                "type": "choice",
-                "instructions": "Welches Element soll laut Befehl bedient werden? Antworte mit der Nummer.",
-                "criteria": {str(i): z.split(". ", 1)[1] for i, z in enumerate(liste_text.splitlines(), 1)},
-            }
-        },
+        "state": state,
+        "questions": {"frage": {"type": "choice", "instructions": instructions, "criteria": criteria}},
     }
     req = urllib.request.Request(
         URL,
@@ -52,10 +43,19 @@ def entscheide(befehl, liste_text, anzahl):
     except urllib.error.HTTPError as e:
         raise SystemExit(f"API-Fehler {e.code}: {e.read().decode(errors='replace')}")
     try:
-        a = antwort["answers"]["element"]
-        return int(a.get("choice") or a.get("selected"))
+        a = antwort["answers"]["frage"]
+        return str(a.get("choice") or a.get("selected"))
     except (KeyError, TypeError, ValueError):
         raise SystemExit(f"Unerwartete Antwort: {antwort}")
+
+
+def entscheide(befehl, liste_text, anzahl=None):
+    """Gibt die Nummer (1-basiert) des Elements zurück, das der Befehl meint."""
+    return int(frage(
+        f"Elemente auf der Seite:\n{liste_text}\n\nBefehl des Nutzers: {befehl}",
+        "Welches Element soll laut Befehl bedient werden? Antworte mit der Nummer.",
+        {str(i): z.split(". ", 1)[1] for i, z in enumerate(liste_text.splitlines(), 1)},
+    ))
 
 
 if __name__ == "__main__":

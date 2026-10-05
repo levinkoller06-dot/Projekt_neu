@@ -12,8 +12,23 @@ BRAVE_PFADE = [
 
 # JS im Browser: sichtbare, bedienbare Elemente einsammeln
 SAMMELN = """
-() => [...document.querySelectorAll('button, a[href], input, textarea, select, [role=button]')]
-  .filter(e => e.offsetParent !== null && e.type !== 'hidden')
+() => {
+  document.querySelectorAll('[data-nr]').forEach(e => e.removeAttribute('data-nr'));  // alte Nummern löschen
+  const sel = 'button, a[href], input, textarea, select, [role=button], [role=option], mat-option';
+  // Nur Elemente, die man wirklich anklicken kann: sichtbar und nicht von einem Popup verdeckt
+  const klickbar = e => {
+    if (e.type === 'hidden' || !e.checkVisibility({checkVisibilityCSS: true, checkOpacity: e.type !== 'radio' && e.type !== 'checkbox'}) || !e.getClientRects().length) return false;
+    if (e.closest('[inert], [aria-hidden=true]')) return false;  // Seite hinter einem offenen Popup
+    const r = e.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return true;  // ausserhalb des Bildes: nicht prüfbar
+    const hit = document.elementFromPoint(x, y);
+    if (!hit) return false;
+    if (e.contains(hit) || hit.contains(e)) return true;
+    const box = e.closest('label, mat-radio-button, mat-button-toggle, [role=radiogroup]');  // Radio-Buttons liegen hinter ihrem Label
+    return !!box && box.contains(hit);
+  };
+  return [...document.querySelectorAll(sel)].filter(klickbar)
   .slice(0, 60)
   .map((e, i) => (e.setAttribute('data-nr', i + 1), {
     tag: e.tagName.toLowerCase(),
@@ -23,7 +38,8 @@ SAMMELN = """
     id: e.id || '',
     label: e.getAttribute('aria-label') || e.title || '',
     href: (e.getAttribute('href') || '').slice(0, 60),
-  }))
+  }));
+}
 """
 
 
@@ -34,7 +50,7 @@ def elemente_auslesen(page):
 def als_liste(elemente):
     zeilen = []
     for i, e in enumerate(elemente, 1):
-        art = {"button": "Button", "a": "Link", "input": "Feld", "textarea": "Feld", "select": "Auswahl"}.get(e["tag"], e["tag"])
+        art = {"button": "Button", "a": "Link", "input": "Feld", "textarea": "Feld", "select": "Auswahl", "mat-option": "Vorschlag"}.get(e["tag"], e["tag"])
         name = e["text"] or e["platzhalter"] or e["label"] or e["id"] or e["href"] or "(ohne Name)"
         name = " ".join(name.split())[:60]  # eine Zeile, max. 60 Zeichen
         zeilen.append(f"{i}. {art}: {name}")
