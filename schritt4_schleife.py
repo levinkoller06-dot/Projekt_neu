@@ -93,7 +93,12 @@ if __name__ == "__main__":
                 print("Keine Elemente mehr.")
                 break
             liste = als_liste(elemente)
-            hinweis = f' Der Text "{text}" ist noch nicht getippt: wähle das Suchfeld (Eingabefeld).' if text and not getippt else ""
+            if text and not getippt:
+                hinweis = f' Der Text "{text}" ist noch nicht getippt: wähle das Suchfeld (Eingabefeld).'
+            elif text:
+                hinweis = " Die Suche ist schon abgeschickt: wähle NICHT noch einmal Suchfeld oder Such-Button, sondern ein Ergebnis."
+            else:
+                hinweis = ""
             nr = entscheide(f"Ziel: {ziel}. Wähle das Element für den nächsten Schritt.{hinweis}", liste)  # Entscheiden
             ziel_el = elemente[nr - 1]
             print(f"Schritt {schritt}: {liste.splitlines()[nr - 1]}")

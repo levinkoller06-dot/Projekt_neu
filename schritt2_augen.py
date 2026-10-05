@@ -4,6 +4,13 @@ import sys
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
+# Umlaute (äöü) in Ausgabe und Eingabe korrekt, egal welche Codepage das Terminal hat
+for _strom in (sys.stdout, sys.stderr, sys.stdin):
+    try:
+        _strom.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 BRAVE_PFADE = [
     r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
     r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
@@ -57,7 +64,7 @@ def brave_verbinden(p, port=9222):
         brave = next((x for x in BRAVE_PFADE if os.path.exists(x)), None)
         if not brave:
             raise SystemExit("Brave nicht gefunden.")
-        laeuft = subprocess.run(["tasklist", "/FI", "IMAGENAME eq brave.exe"], capture_output=True, text=True).stdout
+        laeuft = subprocess.run(["tasklist", "/FI", "IMAGENAME eq brave.exe"], capture_output=True).stdout.decode("utf-8", "ignore")
         if "brave.exe" in laeuft:
             raise SystemExit(
                 "Dein normales Brave läuft schon, aber ohne Steuer-Port. Schliesse Brave einmal ganz "
