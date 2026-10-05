@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><title>Testseite</title>
+<style>
+  body { font-family: sans-serif; background:#111; color:#eee; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; }
+  button { font-size:24px; padding:16px 40px; border-radius:10px; border:none; background:#2d7ff9; color:#fff; cursor:pointer; }
+  #status { margin-top:24px; font-size:28px; }
+</style></head>
+<body>
+  <h1>Testseite projekt-neu</h1>
+  <button id="anmelden">Anmelden</button>
+  <div id="status">Noch nicht geklickt</div>
+  <script>
+    document.getElementById("anmelden").onclick = () => {
+      const s = document.getElementById("status");
+      s.textContent = "✅ Geklickt!";
+      s.style.color = "#4ade80";
+    };
+  </script>
+</body>
+</html>
