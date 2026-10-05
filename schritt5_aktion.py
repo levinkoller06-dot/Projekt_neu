@@ -5,7 +5,7 @@ import sys
 
 from schritt5_desktop import ARTEN, MAX, SPALTEN, fenster
 from schritt3_gehirn import entscheide
-from schritt4_web import freigabe, genauer_treffer
+from schritt4_web import genauer_treffer
 
 
 def elemente_mit_objekt(fenster_obj):
@@ -36,9 +36,6 @@ if __name__ == "__main__":
     nr = genauer_treffer(befehl.replace("öffne", "klick auf"), liste) or entscheide(befehl, liste)  # Entscheiden
     art, name, element = eintraege[nr - 1]
     print(f"Jev wählt: {nr}. {art}: {name}")
-    # Der Explorer blendet Endungen aus ("retrac" statt "retrac.exe"), darum fragen wir bei jeder Datei nach
-    if not freigabe(f"{art}: {name}", immer=(art == "Eintrag")):
-        raise SystemExit("Abgebrochen: nicht freigegeben.")
 
     ziel.set_focus()                                            # nach vorne holen, sonst trifft der Klick ein anderes Fenster
     if art == "Eintrag":                                      # Ausführen: Dateien/Ordner in der Liste per Doppelklick
