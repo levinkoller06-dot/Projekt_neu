@@ -52,7 +52,8 @@ def ziel_erreicht(ziel, page, verlauf):
     antwort = frage(
         f"Ziel des Nutzers: {ziel}\nBisherige Schritte: {'; '.join(verlauf)}\n"
         f"Aktuelle Seite: {page.title()} ({page.url})\nSeiteninhalt: {inhalt}",
-        "Ist das Ziel auf der aktuellen Seite schon erreicht (Suche zeigt Ergebnisse, gesuchte Seite ist offen)?",
+        "Sind ALLE Teile des Ziels erledigt? Bei 'suche X' müssen Ergebnisse zu X sichtbar sein. "
+        "Bei 'klicke ein Ergebnis/einen Link an' muss die Ergebnisseite verlassen und das Ergebnis selbst geöffnet sein.",
         {"ja": "Ja, das Ziel ist erreicht", "nein": "Nein, es sind noch weitere Schritte nötig"},
     )
     return antwort == "ja"
@@ -71,7 +72,8 @@ if __name__ == "__main__":
 
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path=brave, headless=False)
-        page = browser.new_page()
+        context = browser.new_context()
+        page = context.new_page()
         page.goto(url, wait_until="domcontentloaded")
         try:
             page.wait_for_load_state("networkidle", timeout=8000)
@@ -104,6 +106,7 @@ if __name__ == "__main__":
             if not freigabe(liste.splitlines()[nr - 1]):
                 print("Abgebrochen: nicht freigegeben.")
                 break
+            seiten_vorher = len(context.pages)
             sel = f'[data-nr="{nr}"]'
             tippbar = ziel_el["tag"] == "textarea" or (ziel_el["tag"] == "input" and ziel_el["typ"] in ("text", "search", "", "email", "url", "tel"))
             if tippbar and text:
@@ -116,6 +119,13 @@ if __name__ == "__main__":
                 except Exception:
                     page.eval_on_selector(sel, "e => e.click()")
             page.wait_for_timeout(2500)
+            if len(context.pages) > seiten_vorher:             # Link hat einen neuen Tab geöffnet: dort weitermachen
+                page = context.pages[-1]
+                page.bring_to_front()
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=8000)
+                except Exception:
+                    pass
         else:
             print("Abbruch: nach", MAX_SCHRITTE, "Schritten nicht fertig.")
         page.wait_for_timeout(2000)
