@@ -57,9 +57,13 @@ def brave_verbinden(p, port=9222):
         brave = next((x for x in BRAVE_PFADE if os.path.exists(x)), None)
         if not brave:
             raise SystemExit("Brave nicht gefunden.")
-        profil = str(Path(__file__).parent / ".brave-profil")   # eigenes Profil, getrennt vom normalen Brave
-        subprocess.Popen(
-            [brave, f"--remote-debugging-port={port}", f"--user-data-dir={profil}", "--no-first-run"],
+        laeuft = subprocess.run(["tasklist", "/FI", "IMAGENAME eq brave.exe"], capture_output=True, text=True).stdout
+        if "brave.exe" in laeuft:
+            raise SystemExit(
+                "Dein normales Brave läuft schon, aber ohne Steuer-Port. Schliesse Brave einmal ganz "
+                "(alle Fenster) und starte den Befehl nochmal. Danach startet das Programm dein Brave selbst.")
+        subprocess.Popen(                                        # normales Profil: Lesezeichen, Anmeldungen, alles wie gewohnt
+            [brave, f"--remote-debugging-port={port}"],
             creationflags=0x00000008 | 0x00000200,  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: überlebt das Skript
         )
         for _ in range(40):

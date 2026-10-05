@@ -1,4 +1,4 @@
-# Öffnet das Brave-Fenster des Programms (eigenes Profil), damit du dich dort einmal anmelden kannst.
+# Öffnet dein normales Brave (mit Steuer-Port) und eine Seite darin.
 # Benutzung: python brave_oeffnen.py [adresse]     z.B. python brave_oeffnen.py migros.ch
 import sys
 
