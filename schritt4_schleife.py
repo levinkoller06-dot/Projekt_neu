@@ -1,5 +1,5 @@
 # Schritt 4.3: Schleife – Jev macht selbst weiter, bis das Ziel erreicht ist (max. 8 Schritte)
-# Benutzung: python schritt4_schleife.py <url> "<ziel>"
+# Benutzung: python schritt4_schleife.py <url|-> "<ziel>"     (- = die zuletzt offene Seite in Brave weiterbenutzen)
 # Beispiel:  python schritt4_schleife.py wikipedia.org 'suche nach "Katzen"'
 # Text zum Tippen kommt aus dem Ziel: in "Anführungszeichen" oder nach dem Wort "nach".
 import os
@@ -65,19 +65,26 @@ if __name__ == "__main__":
     brave = next((p for p in BRAVE_PFADE if os.path.exists(p)), None)
     if not brave:
         raise SystemExit("Brave nicht gefunden.")
-    url, ziel = ziel_url(sys.argv[1]), sys.argv[2]
+    weiter = sys.argv[1] == "-"                                # "-" = aktuelle Seite in Brave weiterbenutzen
+    url, ziel = (None if weiter else ziel_url(sys.argv[1])), sys.argv[2]
     text = text_aus_ziel(ziel)
     text = None if text == "-" else text
     print("Text zum Tippen:", text)
 
     with sync_playwright() as p:
         context = brave_verbinden(p)                           # Brave bleibt nach dem Skript offen
-        page = context.new_page()
-        page.goto(url, wait_until="domcontentloaded")
-        try:
-            page.wait_for_load_state("networkidle", timeout=8000)
-        except Exception:
-            pass
+        if weiter:
+            if not context.pages:
+                raise SystemExit("Keine offene Seite in Brave zum Weitermachen.")
+            page = context.pages[-1]
+            page.bring_to_front()
+        else:
+            page = context.new_page()
+            page.goto(url, wait_until="domcontentloaded")
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                pass
 
         getippt = False
         verlauf = []                                        # bisherige Schritte (Element + Seite)

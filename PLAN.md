@@ -1,4 +1,4 @@
-# Plan: Nächste Schritte (Projekt_neu)
+# Plan: Nächste Schritte (Projekt_neu) – Schritte 7-10 umgesetzt, noch live auf Windows zu testen
 
 ## Context
 Schritte 1–6 sind fertig (Web-Schleife, Desktop lesen/öffnen, `assistent.py` als Einstieg). Lücken: keine `requirements.txt`, leere README, dünne Fehlerbehandlung, keine Tests, Desktop kann nur "öffnen" (ohne Rückfrage), kein Gedächtnis zwischen Befehlen.

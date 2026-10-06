@@ -44,7 +44,12 @@ def text_modell(aufgabe):
             antwort = json.load(r)
     except urllib.error.HTTPError as e:
         raise SystemExit(f"Gemini-Fehler {e.code}: {e.read().decode(errors='replace')}")
-    return antwort["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise SystemExit(f"Gemini nicht erreichbar: {e}")
+    try:
+        return antwort["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except (KeyError, IndexError, TypeError):
+        raise SystemExit(f"Gemini hat keine Antwort geliefert: {antwort}")
 
 
 def frage(state, instructions, criteria):
@@ -67,6 +72,8 @@ def frage(state, instructions, criteria):
             antwort = json.load(r)
     except urllib.error.HTTPError as e:
         raise SystemExit(f"API-Fehler {e.code}: {e.read().decode(errors='replace')}")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise SystemExit(f"API nicht erreichbar: {e}")
     try:
         a = antwort["answers"]["frage"]
         return str(a.get("choice") or a.get("selected"))
@@ -74,13 +81,26 @@ def frage(state, instructions, criteria):
         raise SystemExit(f"Unerwartete Antwort: {antwort}")
 
 
+def nummer_pruefen(antwort, anzahl):
+    """Wandelt die Modellantwort in eine Nummer von 1 bis anzahl um; sonst klare Fehlermeldung."""
+    try:
+        nr = int(str(antwort).strip().rstrip("."))
+    except ValueError:
+        raise SystemExit(f"Ungültige Antwort vom Modell (keine Nummer): {antwort!r}")
+    if not 1 <= nr <= anzahl:
+        raise SystemExit(f"Ungültige Antwort vom Modell: Nummer {nr} liegt nicht in 1-{anzahl}.")
+    return nr
+
+
 def entscheide(befehl, liste_text, anzahl=None):
     """Gibt die Nummer (1-basiert) des Elements zurück, das der Befehl meint."""
-    return int(frage(
+    zeilen = liste_text.splitlines()
+    antwort = frage(
         f"Elemente auf der Seite:\n{liste_text}\n\nBefehl des Nutzers: {befehl}",
         "Welches Element soll laut Befehl bedient werden? Antworte mit der Nummer.",
-        {str(i): z.split(". ", 1)[1] for i, z in enumerate(liste_text.splitlines(), 1)},
-    ))
+        {str(i): z.split(". ", 1)[1] for i, z in enumerate(zeilen, 1)},
+    )
+    return nummer_pruefen(antwort, anzahl or len(zeilen))
 
 
 if __name__ == "__main__":
