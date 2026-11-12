@@ -5,12 +5,14 @@ Mit Clip:    python3 make_edit.py --clip moonwalk.mp4            (nimmt 3:37-3:4
              python3 make_edit.py --clip schnitt.mp4 --start 0   (schon geschnitten)
 
 Aufbau: Intro (gruener Mond) -> Player-Ansicht, Lied wird eingeschaltet ->
-        echter Clip (oder Beat-Cuts, wenn kein Clip da ist) -> Outro.
+        echter Clip (oder Beat-Cuts) -> Leuchtboden -> Schallplatte ->
+        Scheinwerfer/Schrift -> Outro. Der Ton ist ein selbst erzeugter Beat (117 BPM).
 """
 import argparse
 import math
 import os
 import subprocess
+import wave
 
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
@@ -304,6 +306,256 @@ def scene_outro(t, dur):
     return img
 
 
+# ---------- Gemeinsame Effekte fuer die neuen Szenen ----------
+def hit(img, t, strength=1.0):
+    """Blitz + Farbversatz am Szenenanfang."""
+    img = rgb_split(img, 22 * strength * math.exp(-t / 0.09))
+    return tint(img, (255, 255, 255), strength * math.exp(-t / 0.06))
+
+
+def add_glow(img, layer, radius=9):
+    """Leuchtschicht weich aufaddieren (Weichzeichnen in Viertelaufloesung)."""
+    small = layer.resize((W // 4, H // 4), Image.BILINEAR).filter(ImageFilter.GaussianBlur(radius))
+    img = ImageChops.screen(img, small.resize((W, H), Image.BILINEAR))
+    return ImageChops.screen(img, layer)
+
+
+def star(d, x, y, r, col):
+    d.polygon([(x - r, y), (x, y - r * 0.16), (x + r, y), (x, y + r * 0.16)], fill=col)
+    d.polygon([(x, y - r), (x - r * 0.16, y), (x, y + r), (x + r * 0.16, y)], fill=col)
+
+
+# ---------- Szene: Leuchtboden ----------
+_sky = np.zeros((H, W, 3), np.uint8)
+_sky[..., 1] = np.clip(46 - np.abs(_yy - 830) * 0.09, 0, 255)
+_sky[..., 2] = _sky[..., 1] // 2
+SKY = Image.fromarray(_sky)
+_m = sharpen(MOON.resize((620, 1105), Image.LANCZOS)).crop((0, 60, 620, 1105))
+SKY.paste(ImageChops.lighter(SKY.crop((230, 0, 850, 1045)), tint(_m, (0, 0, 0), 0.25)), (230, 0))
+SKY.paste(tint(SKY.crop((0, 760, W, H)), (0, 0, 0), 0.9), (0, 760))
+PATH = [0, -1, 0, 1, 0, -1, -2, -1, 0, 1, 2, 1, 0, -1, 0, 1]
+TILE_COL = [(255, 250, 235), (30, 215, 96), (255, 250, 235), (255, 120, 190)]
+HY = 830
+
+
+def proj(x, z):
+    return (W / 2 + x * 820 / z, HY + 900 / z)
+
+
+def scene_floor(t, dur):
+    beats = t / BEAT
+    img = SKY.copy()
+    d = ImageDraw.Draw(img)
+    lit = Image.new("RGB", (W, H), (0, 0, 0))
+    dl = ImageDraw.Draw(lit)
+    j0 = int(math.floor(beats))
+    newest = None
+    for j in range(j0 + 11, j0 - 1, -1):
+        zf, zn = (j + 1 - beats) * 0.85 + 0.25, (j - beats) * 0.85 + 0.25
+        if zn < 0.3:
+            continue
+        fade = clamp(1.25 - zn / 8)
+        for c in range(-4, 4):
+            poly = [proj(c - 0.5, zf), proj(c + 0.5, zf), proj(c + 0.5, zn), proj(c - 0.5, zn)]
+            g = int(70 * fade)
+            d.polygon(poly, fill=(6, 10, 8), outline=(g // 2, g, g // 2 + 10))
+            age = beats - (j - 5)  # Platte geht an, wenn sie 5 Reihen entfernt ist
+            if c + 0 == PATH[j % len(PATH)] and age >= 0:
+                b = math.exp(-age / 2.6) * (1 + 0.6 * math.exp(-(age % 1) / 0.15)) * fade
+                col = tuple(int(clamp(b) * v) for v in TILE_COL[j % 4])
+                dl.polygon(poly, fill=col)
+                if age < 1:
+                    newest = proj(c, (zf + zn) / 2)
+    if newest:  # Lichtkegel auf die neueste Platte
+        a = int(70 * math.exp(-(beats % 1) / 0.5))
+        dl.polygon([(W / 2 - 30, -20), (W / 2 + 30, -20), (newest[0] + 90, newest[1]), (newest[0] - 90, newest[1])],
+                   fill=(a, a, int(a * 0.9)))
+    img = add_glow(img, lit, 12)
+    d = ImageDraw.Draw(img)
+    for k in range(26):  # funkelnde Sterne
+        sx, sy = (k * 397) % W, 60 + (k * 211) % 640
+        tw = 0.5 + 0.5 * math.sin(t * 5 + k * 1.7)
+        star(d, sx, sy, 5 + 9 * tw, (int(200 * tw),) * 3)
+    text_center(d, 1790, "JEDER SCHRITT LEUCHTET", font("Inter-Bold.otf", 34), (235, 235, 235), 10)
+    img = zoom_frame(img, 1 + 0.035 * math.exp(-(beats % 1) / 0.18), W / 2, HY)
+    return hit(img, t)
+
+
+# ---------- Szene: Schallplatte ----------
+DISC_D = 960
+DISC = Image.new("RGBA", (DISC_D, DISC_D), (0, 0, 0, 0))
+_dd = ImageDraw.Draw(DISC)
+_dd.ellipse((0, 0, DISC_D - 1, DISC_D - 1), fill=(12, 12, 12, 255))
+for _r in range(210, DISC_D // 2 - 8, 5):
+    _g = 22 + (_r * 37) % 26
+    _dd.ellipse((DISC_D / 2 - _r, DISC_D / 2 - _r, DISC_D / 2 + _r, DISC_D / 2 + _r), outline=(_g, _g, _g, 255))
+_sheen = Image.new("RGBA", (DISC_D, DISC_D), (0, 0, 0, 0))
+_sd = ImageDraw.Draw(_sheen)
+for _a0 in (-62, 118):
+    _sd.pieslice((8, 8, DISC_D - 8, DISC_D - 8), _a0, _a0 + 24, fill=(255, 255, 255, 46))
+_sheen = _sheen.filter(ImageFilter.GaussianBlur(14))
+_dm = Image.new("L", (DISC_D, DISC_D), 0)
+ImageDraw.Draw(_dm).ellipse((0, 0, DISC_D - 1, DISC_D - 1), fill=255)
+_sheen.putalpha(ImageChops.multiply(_sheen.getchannel("A"), _dm))
+DISC = Image.alpha_composite(DISC, _sheen)
+LABEL_D = 392
+LABEL = sharpen(COVER.resize((LABEL_D, LABEL_D), Image.LANCZOS)).convert("RGBA")
+_lm = Image.new("L", (LABEL_D, LABEL_D), 0)
+ImageDraw.Draw(_lm).ellipse((0, 0, LABEL_D - 1, LABEL_D - 1), fill=255)
+ImageDraw.Draw(_lm).ellipse((LABEL_D / 2 - 12, LABEL_D / 2 - 12, LABEL_D / 2 + 12, LABEL_D / 2 + 12), fill=0)
+LABEL.putalpha(_lm)
+VINYL_BG = tint(PLAYER_BG, (4, 40, 20), 0.55)
+F_V1, F_V2 = font("Inter-Black.otf", 150), font("Inter-Medium.otf", 34)
+
+
+def scene_vinyl(t, dur):
+    beats = t / BEAT
+    pulse = math.exp(-(beats % 1) / 0.25)
+    img = VINYL_BG.copy()
+    cx = int(W / 2 + 900 * (1 - ease_out(t / 0.55)))
+    cy = 880
+    glow = Image.new("RGB", (W, H), (0, 0, 0))
+    dg = ImageDraw.Draw(glow)
+    for k in range(60):  # Equalizer-Kranz
+        ang = 2 * math.pi * k / 60
+        ln = 18 + (60 + 90 * pulse) * abs(math.sin(k * 2.4 + t * 6)) * (0.35 + 0.65 * pulse)
+        r0 = DISC_D / 2 + 22
+        x0, y0 = cx + r0 * math.cos(ang), cy + r0 * math.sin(ang)
+        x1, y1 = cx + (r0 + ln) * math.cos(ang), cy + (r0 + ln) * math.sin(ang)
+        dg.line([(x0, y0), (x1, y1)], fill=GREEN, width=9)
+    img = add_glow(img, glow, 7)
+    img.paste(DISC, (cx - DISC_D // 2, cy - DISC_D // 2), DISC)
+    lab = LABEL.rotate(-t * 200, Image.BICUBIC)
+    img.paste(lab, (cx - LABEL_D // 2, cy - LABEL_D // 2), lab)
+    d = ImageDraw.Draw(img)
+    # Tonarm
+    sw = 1 - ease_out((t - 0.3) / 0.6)
+    ax, ay = 1010, 330
+    ang = math.radians(118 - 26 * sw + 1.2 * math.sin(t * 3))
+    ex, ey = ax + 640 * math.cos(ang), ay + 640 * math.sin(ang)
+    d.line([(ax, ay), (ex, ey)], fill=(205, 205, 205), width=14)
+    d.ellipse((ax - 44, ay - 44, ax + 44, ay + 44), fill=(60, 60, 60), outline=(200, 200, 200), width=5)
+    d.rounded_rectangle((ex - 34, ey - 22, ex + 34, ey + 50), 8, fill=(235, 235, 235))
+    a = ease_out((t - 0.4) / 0.5)
+    c = int(255 * a)
+    text_center(d, 1500 + 40 * (1 - a), "THRILLER", F_V1, (c, c, c))
+    text_center(d, 1690, "1982  ·  SEITE A  ·  33 U/MIN", F_V2, (int(190 * a),) * 3, 6)
+    img = zoom_frame(img, 1 + 0.03 * pulse, W / 2, cy)
+    return hit(img, t)
+
+
+# ---------- Szene: Scheinwerfer + Schrift ----------
+POPS = ["THE", "KING", "OF", "POP"]
+F_P = font("Inter-Black.otf", 300)
+F_P2 = font("Inter-Black.otf", 210)
+
+
+def scene_spot(t, dur):
+    beats = t / BEAT
+    k = int(beats)
+    lt = t - k * BEAT
+    img = Image.new("RGB", (W, H), (3, 5, 4))
+    lay = Image.new("RGB", (W, H), (0, 0, 0))
+    dl = ImageDraw.Draw(lay)
+    for n, (x0, col) in enumerate([(120, (20, 150, 70)), (540, (150, 150, 140)), (960, (150, 60, 110))]):
+        tx = W / 2 + 430 * math.sin(t * 1.9 + n * 2.1)
+        dl.polygon([(x0 - 20, -30), (x0 + 20, -30), (tx + 230, H), (tx - 230, H)], fill=col)
+    img = add_glow(img, lay.filter(ImageFilter.GaussianBlur(18)), 14)
+    d = ImageDraw.Draw(img)
+    white = (255, 255, 255)
+    if k < 4:
+        w = POPS[k]
+        d.text((W / 2, 960), w, font=F_P, anchor="mm", fill=white if k % 2 == 0 else None,
+               stroke_width=0 if k % 2 == 0 else 8, stroke_fill=white)
+        img = zoom_frame(img, 1 + 0.25 * math.exp(-lt / 0.1))
+    else:
+        lt = t - 4 * BEAT
+        d.text((W / 2, 830), "THE KING", font=F_P2, anchor="mm", fill=white)
+        d.text((W / 2, 1060), "OF POP", font=F_P2, anchor="mm", fill=GREEN)
+        for n in range(46):  # Glitzer-Explosion
+            ang = n * 2.399
+            dist = (140 + (n * 53) % 520) * ease_out(lt / 0.9)
+            tw = abs(math.sin(lt * 9 + n))
+            star(d, W / 2 + dist * math.cos(ang), 945 + dist * 1.25 * math.sin(ang), 8 + 26 * tw,
+                 (255, 255, int(160 + 95 * tw)))
+        img = zoom_frame(img, 1 + 0.18 * math.exp(-lt / 0.12) + 0.03 * lt)
+    return hit(img, lt, 1.0 if k < 5 else 0.0)
+
+
+# ---------- Ton: selbst erzeugter Beat (kein Originalsong) ----------
+SR = 44100
+
+
+def synth(total, music_at, hits, duck=None):
+    n = int(total * SR)
+    out = np.zeros(n)
+    rng = np.random.default_rng(3)
+
+    def put(sig, at, gain=1.0):
+        i = int(at * SR)
+        if i >= n or i < 0:
+            return
+        sig = sig[: n - i]
+        out[i:i + len(sig)] += sig * gain
+
+    def env(length, decay):
+        tt = np.arange(int(length * SR)) / SR
+        return tt, np.exp(-tt / decay)
+
+    tt, e = env(0.35, 0.09)
+    kick = np.sin(2 * np.pi * (45 * tt + (150 - 45) * 0.03 * (1 - np.exp(-tt / 0.03)))) * e
+    tt, e = env(0.25, 0.06)
+    snare = (rng.standard_normal(len(tt)) * 0.7 + np.sin(2 * np.pi * 190 * tt) * 0.5) * e
+    tt, e = env(0.06, 0.012)
+    hat = np.diff(rng.standard_normal(len(tt) + 1)) * e
+    tt, e = env(1.6, 0.45)
+    crash = np.diff(rng.standard_normal(len(tt) + 1)) * e
+
+    def note(freq, length, bright=0.5):
+        tt = np.arange(int(length * SR)) / SR
+        s = np.sin(2 * np.pi * freq * tt) + bright * np.sin(4 * np.pi * freq * tt) + 0.25 * bright * np.sin(6 * np.pi * freq * tt)
+        a = np.minimum(tt / 0.008, 1) * np.exp(-tt / (length * 0.7))
+        return s * a
+
+    A = 55.0
+    semi = lambda s: A * 2 ** (s / 12)
+    bass_line = [0, None, 0, 7, None, 5, 3, None, 0, None, 0, 10, None, 7, 5, 3]  # eigene Linie in a-Moll
+    chords = [[12, 15, 19], [8, 12, 15], [10, 14, 17], [12, 15, 19]]
+    eighth = BEAT / 2
+    steps = int((total - music_at) / eighth)
+    for s in range(steps):
+        at = music_at + s * eighth
+        beat = s // 2
+        if s % 2 == 0:
+            put(kick, at, 0.95) if beat % 2 == 0 else put(snare, at, 0.6)
+            if beat % 2 == 1:
+                put(kick, at, 0.25)
+        put(hat, at, 0.22 if s % 2 == 0 else 0.13)
+        b = bass_line[s % 16]
+        if b is not None:
+            put(note(semi(b), eighth * 0.95, 0.6), at, 0.42)
+        if s % 16 in (3, 11):
+            for c in chords[(s // 16) % 4]:
+                put(note(semi(c + 12), BEAT * 1.4, 0.3), at, 0.07)
+    for h in hits:
+        put(crash, h, 0.2)
+    # Intro: tiefer Ton + anschwellendes Rauschen, dann Tipp-Klick
+    ni = int(music_at * SR)
+    ti = np.arange(ni) / SR
+    out[:ni] += 0.16 * np.sin(2 * np.pi * 55 * ti) * np.minimum(ti / 0.5, 1) * np.minimum((music_at - ti) / 0.2, 1)
+    first = hits[0]
+    nr = int(first * SR)
+    out[:nr] += 0.10 * np.diff(rng.standard_normal(nr + 1)) * (np.arange(nr) / nr) ** 3
+    put(note(1400, 0.05, 0.2), music_at - 0.02, 0.3)
+    if duck:
+        a, b = int(duck[0] * SR), int(duck[1] * SR)
+        out[a:b] *= 0.22
+    fade = int(1.3 * SR)
+    out[-fade:] *= np.linspace(1, 0, fade) ** 1.5
+    out = np.tanh(out * 1.25) * 0.85
+    return (out * 32767).astype(np.int16)
+
+
 # ---------- Zusammenbau ----------
 def main():
     ap = argparse.ArgumentParser()
@@ -314,18 +566,20 @@ def main():
     a = ap.parse_args()
 
     if a.clip:
-        clip = Clip(a.clip, a.start, a.dur)
+        clip = Clip(a.clip, a.start, BEAT * 10 if a.dur == 5.0 else a.dur)
         mid = (clip.scene, len(clip.frames) / FPS)
     else:
         mid = (scene_cuts, BEAT * len(SHOTS))
-    scenes = [(scene_intro, BEAT * 4), (scene_player, 4.6), mid, (scene_outro, 2.8)]
-    clip_at = scenes[0][1] + scenes[1][1]
+    scenes = [(scene_intro, BEAT * 4), (scene_player, TAP + BEAT * 6), mid, (scene_floor, BEAT * 8),
+              (scene_vinyl, BEAT * 8), (scene_spot, BEAT * 6), (scene_outro, BEAT * 6)]
+    starts = [sum(s[1] for s in scenes[:k]) for k in range(len(scenes))]
+    total = sum(round(s[1] * FPS) for s in scenes) / FPS
 
     tmp = a.out + ".video.mp4"
     enc = subprocess.Popen(
         ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS),
-         "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p",
-         "-movflags", "+faststart", tmp], stdin=subprocess.PIPE)
+         "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p", tmp],
+        stdin=subprocess.PIPE)
     i = 0
     for fn, dur in scenes:
         for k in range(round(dur * FPS)):
@@ -334,19 +588,27 @@ def main():
     enc.stdin.close()
     enc.wait()
 
-    if a.clip:  # Originalton des Ausschnitts an die richtige Stelle legen
-        ms = int(clip_at * 1000)
-        r = subprocess.run(
-            ["ffmpeg", "-y", "-v", "error", "-i", tmp, "-ss", str(a.start), "-t", str(mid[1]), "-i", a.clip,
-             "-filter_complex", f"[1:a]afade=t=in:d=0.05,afade=t=out:st={mid[1] - 0.3}:d=0.3,adelay={ms}:all=1[a]",
-             "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", a.out])
-        if r.returncode == 0:
-            os.remove(tmp)
-        else:
-            os.replace(tmp, a.out)
+    wav = a.out + ".beat.wav"
+    pcm = synth(total, starts[1] + TAP, starts[1:], duck=(starts[2], starts[3]) if a.clip else None)
+    with wave.open(wav, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setframerate(SR)
+        wf.setsampwidth(2)
+        wf.writeframes(pcm.tobytes())
+
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", tmp, "-i", wav]
+    if a.clip:  # Originalton des Ausschnitts ueber den (leiser gestellten) Beat legen
+        ms = int(starts[2] * 1000)
+        cmd += ["-ss", str(a.start), "-t", str(mid[1]), "-i", a.clip, "-filter_complex",
+                f"[2:a]afade=t=in:d=0.05,afade=t=out:st={mid[1] - 0.3}:d=0.3,adelay={ms}:all=1[c];"
+                f"[1:a][c]amix=inputs=2:duration=first:normalize=0[a]", "-map", "0:v", "-map", "[a]"]
     else:
-        os.replace(tmp, a.out)
-    print(f"fertig: {a.out}  ({i / FPS:.1f} s, {i} Bilder)")
+        cmd += ["-map", "0:v", "-map", "1:a"]
+    cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-movflags", "+faststart", a.out]
+    subprocess.run(cmd, check=True)
+    os.remove(tmp)
+    os.remove(wav)
+    print(f"fertig: {a.out}  ({total:.1f} s, {i} Bilder)")
 
 
 if __name__ == "__main__":
