@@ -1,12 +1,12 @@
 """Michael-Jackson-Edit (hochkant, 1080x1920, 30 fps).
 
-Ohne Clip:   python3 make_edit.py
-Mit Clip:    python3 make_edit.py --clip moonwalk.mp4            (nimmt 3:37-3:42)
-             python3 make_edit.py --clip schnitt.mp4 --start 0   (schon geschnitten)
+Mit eigenem Quellvideo (Musik + Clips):  python3 make_edit.py --source quelle.mp4
+   (liegt assets/quelle.mp4 vor, wird es automatisch genommen)
+Ohne Quellvideo:                          python3 make_edit.py
+   (dann Beat-Cuts aus den Bildern und ein selbst erzeugter Beat)
 
-Aufbau: Intro (gruener Mond) -> Player-Ansicht, Lied wird eingeschaltet ->
-        echter Clip (oder Beat-Cuts) -> Leuchtboden -> Schallplatte ->
-        Scheinwerfer/Schrift -> Outro. Der Ton ist ein selbst erzeugter Beat (117 BPM).
+Aufbau: Player (Lied wird eingeschaltet) -> Logo, Silhouette tanzt -> Clips ->
+        Leuchtboden -> Clips -> Schallplatte -> Clip -> Scheinwerfer -> Outro.
 """
 import argparse
 import math
@@ -102,24 +102,46 @@ def text_center(d, y, s, f, fill_, spacing=0):
         d.text((W / 2, y), s, font=f, fill=fill_, anchor="ma")
 
 
-# ---------- Szene 1: Intro ----------
+# ---------- Szene: Logo, die Silhouette tanzt ----------
 MOON_S = sharpen(fill(MOON, 1.0))
+GXN, GYN = 18, 32
+PIV = (0.86 * W, 0.70 * H)  # Drehpunkt am Hals
 
 
-def scene_intro(t, dur):
-    p = t / dur
-    img = zoom_frame(MOON_S, 1.0 + 0.10 * p)
-    pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi / BEAT)
-    glow = img.filter(ImageFilter.GaussianBlur(30)) if int(t * FPS) % 2 == 0 else img
-    img = ImageChops.screen(img, tint(glow, (0, 0, 0), 1 - 0.35 * pulse))
-    # Glitch-Einblendung
-    if t < 0.5:
-        img = rgb_split(img, 30 * (1 - t / 0.5))
-        img = tint(img, (0, 0, 0), 1 - ease_out(t / 0.4))
-        if int(t * FPS) in (3, 4, 9):
-            img = ImageChops.offset(img, 40, 0)
-    if t > dur - 0.2:
-        img = tint(img, (255, 255, 255), (t - (dur - 0.2)) / 0.2)
+def _smooth(x, a, b):
+    v = clamp((x - a) / (b - a))
+    return v * v * (3 - 2 * v)
+
+
+def scene_logo(t, dur):
+    beats = t / BEAT
+    amp = ease_io((beats - 0.5) / 1.5)  # faengt nach dem ersten Schlag an zu tanzen
+    wild = 1 + 0.6 * _smooth(beats, 5.5, 6.5)
+    ang = math.radians(8) * amp * wild * math.sin(math.pi * beats)
+    bob = 30 * amp * (0.5 - abs(math.sin(math.pi * beats)) ** 0.7)
+    ca, sa = math.cos(ang), math.sin(ang)
+
+    def src(x, y):
+        w = _smooth(x / W, 0.50, 0.66) * (1 - _smooth(y / H, 0.64, 0.72)) * _smooth(y / H, 0.06, 0.14)
+        px, py = x - PIV[0], y - PIV[1]
+        dx = ca * px - sa * py - px + 12 * amp * wild * math.sin(2 * math.pi * beats + y / H * 10)
+        dy = sa * px + ca * py - py + bob
+        return x - w * dx, y - w * dy
+
+    mesh = []
+    for i in range(GXN):
+        for j in range(GYN):
+            x0, x1, y0, y1 = W * i / GXN, W * (i + 1) / GXN, H * j / GYN, H * (j + 1) / GYN
+            mesh.append(((int(x0), int(y0), int(x1), int(y1)),
+                         (*src(x0, y0), *src(x0, y1), *src(x1, y1), *src(x1, y0))))
+    img = MOON_S.transform((W, H), Image.MESH, mesh, Image.BILINEAR)
+    pulse = math.exp(-(beats % 1) / 0.3)
+    glow = img.resize((W // 8, H // 8)).filter(ImageFilter.GaussianBlur(6)).resize((W, H), Image.BILINEAR)
+    img = ImageChops.screen(img, tint(glow, (0, 0, 0), 1 - 0.55 * pulse))
+    img = zoom_frame(img, 1.0 + 0.05 * t / dur + 0.03 * pulse)
+    img = rgb_split(img, 22 * math.exp(-t / 0.09))
+    if t > dur - 0.15:
+        img = tint(img, (255, 255, 255), (t - (dur - 0.15)) / 0.15)
     return img
 
 
@@ -235,8 +257,8 @@ def scene_player(t, dur):
 # ---------- Szene 3: echter Clip oder Beat-Cuts ----------
 COVER_S = sharpen(COVER.resize((1400, 1400), Image.LANCZOS))
 SHOTS = [  # (Quelle, zoom, cx, cy)
-    (COVER_S, 1.0, 0.56, 0.5), (COVER_S, 2.1, 0.60, 0.26), (MOON_S, 1.0, 0.5, 0.5), (COVER_S, 1.5, 0.45, 0.62),
-    (COVER_S, 2.6, 0.62, 0.22), (MOON_S, 1.6, 0.6, 0.35), (COVER_S, 1.25, 0.6, 0.4), (COVER_S, 1.9, 0.3, 0.2),
+    (COVER_S, 1.0, 0.56, 0.5), (COVER_S, 2.1, 0.60, 0.26), (COVER_S, 1.7, 0.2, 0.15), (COVER_S, 1.5, 0.45, 0.62),
+    (COVER_S, 2.6, 0.62, 0.22), (COVER_S, 2.0, 0.5, 0.75), (COVER_S, 1.25, 0.6, 0.4), (COVER_S, 1.9, 0.3, 0.2),
     (COVER_S, 1.1, 0.5, 0.5), (COVER_S, 2.3, 0.6, 0.28),
 ]
 WORDS = ["BILLIE", "JEAN", "", "THE KING", "OF POP", "", "THRILLER", "1982", "", "MJ"]
@@ -265,23 +287,52 @@ def scene_cuts(t, dur):
     return img
 
 
-class Clip:
-    def __init__(self, path, start, dur):
-        vf = f"fps={FPS},scale=-2:{H},crop={W}:{H},eq=contrast=1.08:saturation=1.1"
-        cmd = ["ffmpeg", "-v", "error", "-ss", str(start), "-t", str(dur), "-i", path,
-               "-vf", vf, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
-        raw = subprocess.run(cmd, capture_output=True, check=True).stdout
-        n = len(raw) // (W * H * 3)
-        if n == 0:
-            raise SystemExit("Clip liefert keine Bilder - Pfad/Startzeit pruefen.")
-        self.frames = np.frombuffer(raw[: n * W * H * 3], np.uint8).reshape(n, H, W, 3)
+SOURCE = None
+CROP = "crop=852:656:216:71"  # Bildbereich des Musikvideos in der Bildschirmaufnahme
+MUSIC_AT = 14.44              # hier setzt im Quellvideo die Musik ein
+FW, FH, FY = 1080, 1220, 350
+_cache = {}
 
-    def scene(self, t, dur):
-        i = min(int(t * FPS), len(self.frames) - 1)
-        img = Image.fromarray(self.frames[i])
-        img = zoom_frame(img, 1.0 + 0.12 * math.exp(-t / 0.15))
-        img = rgb_split(img, 20 * math.exp(-t / 0.1))
-        return tint(img, (255, 255, 255), math.exp(-t / 0.08))
+
+def footage(start, dur, cx):
+    key = (start, dur, cx)
+    if key not in _cache:
+        _cache.clear()
+        vf = (f"{CROP},fps={FPS},scale=-2:{FH}:flags=lanczos,crop={FW}:{FH}:(iw-{FW})*{cx}:0,"
+              f"unsharp=5:5:0.8,eq=contrast=1.06:saturation=1.12")
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", str(start), "-t", str(dur + 0.2), "-i", SOURCE,
+                              "-vf", vf, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                             capture_output=True, check=True).stdout
+        n = len(raw) // (FW * FH * 3)
+        _cache[key] = np.frombuffer(raw[: n * FW * FH * 3], np.uint8).reshape(n, FH, FW, 3)
+    return _cache[key]
+
+
+def clip_block(shots):
+    """shots: (Startsekunde im Quellvideo, Laenge in Beats, Bildausschnitt 0..1)."""
+    total = sum(s[1] for s in shots) * BEAT
+
+    def scene(t, dur):
+        acc = 0.0
+        for start, nb, cx in shots:
+            if t < acc + nb * BEAT - 1e-6 or (start, nb, cx) == shots[-1]:
+                break
+            acc += nb * BEAT
+        lt = t - acc
+        fr = footage(start, nb * BEAT, cx)
+        fg = Image.fromarray(fr[min(int(round(lt * FPS)), len(fr) - 1)])
+        bg = fill(fg, 1.0, size=(W // 10, H // 10)).filter(ImageFilter.GaussianBlur(5)).resize((W, H), Image.BILINEAR)
+        img = tint(bg, (0, 0, 0), 0.5)
+        img.paste(fg, (0, FY))
+        d = ImageDraw.Draw(img)
+        d.rectangle((0, FY - 14, W, FY - 9), fill=(255, 255, 255))
+        d.rectangle((0, FY + FH + 9, W, FY + FH + 14), fill=(255, 255, 255))
+        pulse = math.exp(-((t / BEAT) % 1) / 0.2)
+        img = zoom_frame(img, 1 + 0.09 * math.exp(-lt / 0.12) + 0.05 * lt / (nb * BEAT) + 0.012 * pulse,
+                         W / 2, FY + FH / 2)
+        return hit(img, lt, 0.8)
+
+    return scene, total
 
 
 # ---------- Szene 4: Outro ----------
@@ -330,8 +381,6 @@ _sky = np.zeros((H, W, 3), np.uint8)
 _sky[..., 1] = np.clip(46 - np.abs(_yy - 830) * 0.09, 0, 255)
 _sky[..., 2] = _sky[..., 1] // 2
 SKY = Image.fromarray(_sky)
-_m = sharpen(MOON.resize((620, 1105), Image.LANCZOS)).crop((0, 60, 620, 1105))
-SKY.paste(ImageChops.lighter(SKY.crop((230, 0, 850, 1045)), tint(_m, (0, 0, 0), 0.25)), (230, 0))
 SKY.paste(tint(SKY.crop((0, 760, W, H)), (0, 0, 0), 0.9), (0, 760))
 PATH = [0, -1, 0, 1, 0, -1, -2, -1, 0, 1, 2, 1, 0, -1, 0, 1]
 TILE_COL = [(255, 250, 235), (30, 215, 96), (255, 250, 235), (255, 120, 190)]
@@ -558,20 +607,26 @@ def synth(total, music_at, hits, duck=None):
 
 # ---------- Zusammenbau ----------
 def main():
+    global SOURCE
+    default_src = os.path.join(HERE, "assets", "quelle.mp4")
     ap = argparse.ArgumentParser()
-    ap.add_argument("--clip", help="Videodatei mit dem echten Auftritt")
-    ap.add_argument("--start", type=float, default=217.0, help="Startsekunde im Clip (Standard 3:37)")
-    ap.add_argument("--dur", type=float, default=5.0, help="Laenge des Ausschnitts")
+    ap.add_argument("--source", default=default_src if os.path.exists(default_src) else None,
+                    help="eigenes Quellvideo mit Musik und Clips")
     ap.add_argument("--out", default=os.path.join(HERE, "mj_edit.mp4"))
     a = ap.parse_args()
+    SOURCE = a.source
 
-    if a.clip:
-        clip = Clip(a.clip, a.start, BEAT * 10 if a.dur == 5.0 else a.dur)
-        mid = (clip.scene, len(clip.frames) / FPS)
+    scenes = [(scene_player, TAP + BEAT * 4), (scene_logo, BEAT * 8)]
+    if SOURCE:
+        scenes += [clip_block([(19.55, 2, 0.5), (27.1, 2, 0.4), (29.3, 2, 0.6), (31.45, 2, 0.5)]),
+                   clip_block([(34.15, 4, 0.5)]),
+                   (scene_floor, BEAT * 6),
+                   clip_block([(36.5, 2, 0.4), (37.75, 6, 0.45)]),
+                   (scene_vinyl, BEAT * 6),
+                   clip_block([(41.5, 1, 0.5), (48.95, 5, 0.4)])]
     else:
-        mid = (scene_cuts, BEAT * len(SHOTS))
-    scenes = [(scene_intro, BEAT * 4), (scene_player, TAP + BEAT * 6), mid, (scene_floor, BEAT * 8),
-              (scene_vinyl, BEAT * 8), (scene_spot, BEAT * 6), (scene_outro, BEAT * 6)]
+        scenes += [(scene_cuts, BEAT * len(SHOTS)), (scene_floor, BEAT * 8), (scene_vinyl, BEAT * 8)]
+    scenes += [(scene_spot, BEAT * 6), (scene_outro, BEAT * 6)]
     starts = [sum(s[1] for s in scenes[:k]) for k in range(len(scenes))]
     total = sum(round(s[1] * FPS) for s in scenes) / FPS
 
@@ -581,33 +636,35 @@ def main():
          "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p", tmp],
         stdin=subprocess.PIPE)
     i = 0
-    for fn, dur in scenes:
-        for k in range(round(dur * FPS)):
-            enc.stdin.write(finish(fn(k / FPS, dur), i).tobytes())
+    for (fn, dur), st in zip(scenes, starts):
+        # Bildnummern laufen global, damit die Szenen exakt auf dem Takt bleiben
+        end = round((st + dur) * FPS)
+        while i < end:
+            enc.stdin.write(finish(fn(i / FPS - st, dur), i).tobytes())
             i += 1
     enc.stdin.close()
     enc.wait()
 
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", tmp]
     wav = a.out + ".beat.wav"
-    pcm = synth(total, starts[1] + TAP, starts[1:], duck=(starts[2], starts[3]) if a.clip else None)
-    with wave.open(wav, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setframerate(SR)
-        wf.setsampwidth(2)
-        wf.writeframes(pcm.tobytes())
-
-    cmd = ["ffmpeg", "-y", "-v", "error", "-i", tmp, "-i", wav]
-    if a.clip:  # Originalton des Ausschnitts ueber den (leiser gestellten) Beat legen
-        ms = int(starts[2] * 1000)
-        cmd += ["-ss", str(a.start), "-t", str(mid[1]), "-i", a.clip, "-filter_complex",
-                f"[2:a]afade=t=in:d=0.05,afade=t=out:st={mid[1] - 0.3}:d=0.3,adelay={ms}:all=1[c];"
-                f"[1:a][c]amix=inputs=2:duration=first:normalize=0[a]", "-map", "0:v", "-map", "[a]"]
+    if SOURCE:  # Musik aus dem Quellvideo, startet genau beim Tipp auf Play
+        mlen = total - TAP
+        cmd += ["-ss", str(MUSIC_AT), "-t", str(mlen), "-i", SOURCE, "-filter_complex",
+                f"[1:a]afade=t=in:d=0.02,afade=t=out:st={mlen - 1.6}:d=1.6,adelay={int(TAP * 1000)}:all=1,apad[a]",
+                "-map", "0:v", "-map", "[a]", "-shortest"]
     else:
-        cmd += ["-map", "0:v", "-map", "1:a"]
+        pcm = synth(total, TAP, starts[1:])
+        with wave.open(wav, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setframerate(SR)
+            wf.setsampwidth(2)
+            wf.writeframes(pcm.tobytes())
+        cmd += ["-i", wav, "-map", "0:v", "-map", "1:a"]
     cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-movflags", "+faststart", a.out]
     subprocess.run(cmd, check=True)
     os.remove(tmp)
-    os.remove(wav)
+    if os.path.exists(wav):
+        os.remove(wav)
     print(f"fertig: {a.out}  ({total:.1f} s, {i} Bilder)")
 
 
